@@ -1,0 +1,238 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# In[2]:
+
+
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
+
+data_orig = pd.read_csv("dataset/train.csv")
+data_orig.head()
+
+data_orig['Action'].value_counts()
+
+data = data_orig.iloc[:,1:]
+data.head()
+
+
+label_encoder = LabelEncoder()
+data.iloc[:,42] = label_encoder.fit_transform(data.iloc[:,42]).astype('int')
+data.head()
+
+
+y = data[["Action"]].values
+X = data.drop(["Action"], axis=1)
+
+#sns.pairplot(data, hue="Action", size=3)
+
+sc = StandardScaler()
+sc.fit(X) 
+X_scaled = sc.transform(X) 
+
+
+
+x_train, x_test, y_train, y_test = train_test_split(X_scaled, y, test_size=.3, random_state=1)
+
+
+
+
+model = RandomForestClassifier(max_depth=10, n_estimators=1000)
+model.fit(x_train, y_train)
+preds = model.predict(x_test)
+print(classification_report(y_test, preds))
+
+
+from sklearn.model_selection import RandomizedSearchCV
+
+n_estimators = [int(x) for x in np.linspace(start = 100, stop = 2000, num = 10)]
+max_features = ['auto', 'sqrt']
+max_depth = [int(x) for x in np.linspace(10, 110, num = 11)]
+max_depth.append(None)
+min_samples_split = [2, 5, 10]
+min_samples_leaf = [1, 2, 4]
+bootstrap = [True, False]
+random_grid = {'n_estimators': n_estimators,
+               'max_features': max_features,
+               'max_depth': max_depth,
+               'min_samples_split': min_samples_split,
+               'min_samples_leaf': min_samples_leaf,
+               'bootstrap': bootstrap}
+print(random_grid)
+{'bootstrap': [True, False],
+ 'max_depth': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, None],
+ 'max_features': ['auto', 'sqrt'],
+ 'min_samples_leaf': [1, 2, 4],
+ 'min_samples_split': [2, 5, 10],
+ 'n_estimators': [200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000]}
+
+
+rf = RandomForestClassifier()
+rf_random = RandomizedSearchCV(estimator = rf, param_distributions = random_grid, n_iter = 100, cv = 3, verbose=2, random_state=42, n_jobs = -1)
+rf_random.fit(x_train, y_train)
+
+
+def evaluate(model, test_features, test_labels):
+    predictions = model.predict(test_features)
+    print('Model Performance')
+    accuracy = accuracy_score(test_labels, predictions)
+    print('Accuracy = ', accuracy)
+    return accuracy
+
+base_model = RandomForestClassifier(n_estimators = 10, random_state = 42)
+base_model.fit(x_train, y_train)
+base_accuracy = evaluate(base_model, x_test, y_test)
+
+best_random = rf_random.best_estimator_
+random_accuracy = evaluate(best_random, x_test, y_test)
+
+print('Improvement of {:0.2f}%.'.format( 100 * (random_accuracy - base_accuracy) / base_accuracy))
+
+
+
+from sklearn.model_selection import GridSearchCV
+param_grid = {
+    'bootstrap': [True, False],
+    'max_depth': [70, 80, 90, 100, 110, 120],
+    'max_features': [10, 20, 30, 40],
+    'min_samples_leaf': [1, 2, 3],
+    'min_samples_split': [3, 5, 7],
+    'n_estimators': [500, 1000, 1200, 1500, 1800, 2000]
+}
+
+    
+rf_grid = RandomForestClassifier()
+# Instantiate the grid search model
+grid_search = GridSearchCV(estimator = rf_grid, param_grid = param_grid, cv = 3, n_jobs = -1, verbose = 2)
+grid_search.fit(x_train, y_train)
+grid_search.best_params_
+
+mlpclassifier = MLPClassifier(hidden_layer_sizes=(20), max_iter=300,activation = 'relu',solver='adam',random_state=1)
+mlpclassifier.fit(x_train, y_train)
+preds = clf.predict(x_test)
+score = clf.score(x_test, y_test)
+print("score : ", score)
+print("confusion_matrix", confusion_matrix(y_test, preds))
+print("classification_report")
+print(classification_report(y_test, preds))
+
+
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import f_classif
+
+bestfeatures = SelectKBest(score_func=f_classif, k=10)
+fit = bestfeatures.fit(X, y)
+dfscores = pd.DataFrame(fit.scores_)
+dfcolumns = pd.DataFrame(X.columns)
+#concat two dataframes for better visualization 
+featureScores = pd.concat([dfcolumns,dfscores],axis=1)
+featureScores.columns = ['Specs','Score']  #naming the dataframe columns
+print(featureScores.nlargest(30,'Score'))  #print 10 best features
+
+
+# In[72]:
+
+
+from sklearn.ensemble import ExtraTreesClassifier
+model = ExtraTreesClassifier()
+model.fit(X,y)
+print(model.feature_importances_)
+feat_importances = pd.Series(model.feature_importances_, index=X.columns)
+feat_importances.nlargest(20).plot(kind='barh')
+plt.show()
+
+
+# In[79]:
+
+
+imp_cols_feat = featureScores.nlargest(20,'Score')['Specs'].values
+
+
+# In[87]:
+
+
+imp_cols_tree = feat_importances.nlargest(n = 25).index.values
+
+
+# In[88]:
+
+
+X_feat_imp_tree = X[imp_cols_tree]
+X_feat_imp_feat = X[imp_cols_feat]
+X_feat_imp_feat.head()
+
+
+# In[89]:
+
+
+sc = StandardScaler()
+sc.fit(X_feat_imp_tree) 
+X_feat_scaled_tree = sc.transform(X_feat_imp_tree) 
+
+sc.fit(X_feat_imp_feat) 
+X_feat_scaled_feat = sc.transform(X_feat_imp_feat) 
+
+x_train, x_test, y_train, y_test = train_test_split(X_feat_scaled_tree, y, test_size=.2, random_state=1)
+model = RandomForestClassifier(max_depth=10, n_estimators=1000)
+model.fit(x_train, y_train)
+preds = model.predict(x_test)
+print(classification_report(y_test, preds))
+
+
+x_train, x_test, y_train, y_test = train_test_split(X_feat_scaled_feat, y, test_size=.2, random_state=1)
+model = RandomForestClassifier(max_depth=10, n_estimators=1000)
+model.fit(x_train, y_train)
+preds = model.predict(x_test)
+print(classification_report(y_test, preds))
+
+
+
+names = ["Nearest Neighbors", "Linear SVM", "RBF SVM", "Gaussian Process",
+         "Decision Tree", "Random Forest", "Neural Net", "AdaBoost",
+         "Naive Bayes"]
+
+classifiers = [
+    KNeighborsClassifier(7),
+    SVC(C=0.025),
+    SVC(gamma=2, C=1),
+    GaussianProcessClassifier(1.0 * RBF(1.0)),
+    DecisionTreeClassifier(max_depth=5),
+    RandomForestClassifier(max_depth=5, n_estimators=10, max_features=12),
+    MLPClassifier(alpha=1, max_iter=1000),
+    AdaBoostClassifier(),
+    GaussianNB()]
+
+figure = plt.figure(figsize=(27, 9))
+
+for name, clf in zip(names, classifiers):
+    #ax = plt.subplot(len(datasets), len(classifiers) + 1, i)
+    print("----------------",name,"----------------")
+    clf.fit(x_train, y_train)
+    preds = clf.predict(x_test)
+    score = clf.score(x_test, y_test)
+    print("score : ", score)
+    print("confusion_matrix", confusion_matrix(y_test, preds))
+    print("classification_report")
+    print(classification_report(y_test, preds))
+    
+    
